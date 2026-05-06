@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<title>클리닝 기록 - 의뢰인</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="container">
+  <header class="top">
+    <h1>클리닝 기록 <small style="font-weight:normal;color:var(--muted);font-size:14px">의뢰인</small></h1>
+    <div class="nav">
+      <a href="upload.html">업로드</a>
+      <a href="history.html">과거 기록</a>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>오늘 받은 결과물 <span id="todayDate" style="font-weight:normal;color:var(--muted);font-size:14px"></span></h2>
+    <div id="todayPhotos"></div>
+  </div>
+
+  <div class="card">
+    <h2>오늘 추가 요청</h2>
+    <div class="sub">기본 항목 외에 오늘만 별도로 부탁할 일이 있을 때 추가하세요.</div>
+    <div class="list" id="extraList"></div>
+    <div class="row" style="margin-top:8px">
+      <input type="text" id="extraInput" class="grow" placeholder="예: 입구 거미줄 제거">
+      <button class="btn btn-primary" id="extraAdd">추가</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>기본 체크리스트</h2>
+    <div class="sub">매일 클리닝 받을 항목입니다. 한 번 설정하면 계속 사용돼요.</div>
+    <div class="list" id="defaultList"></div>
+    <div class="row" style="margin-top:8px">
+      <input type="text" id="defaultInput" class="grow" placeholder="예: 화장실">
+      <button class="btn" id="defaultAdd">추가</button>
+    </div>
+  </div>
+
+  <div class="card" style="text-align:center">
+    <a href="upload.html" class="btn btn-block">클리닝업체 업로드 페이지 열기</a>
+    <div class="sub" style="margin-top:8px">이 주소를 클리닝업체에 공유하세요.</div>
+  </div>
+</div>
+
+<div class="modal" id="modal">
+  <button class="close" id="modalClose">×</button>
+  <img id="modalImg" alt="">
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+const toast = $('#toast');
+function showToast(msg, isError) {
+  toast.textContent = msg;
+  toast.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => { toast.className = 'toast'; }, 2000);
+}
+function openModal(src) { $('#modalImg').src = src; $('#modal').classList.add('show'); }
+$('#modalClose').onclick = () => $('#modal').classList.remove('show');
+$('#modal').onclick = (e) => { if (e.target.id === 'modal') $('#modal').classList.remove('show'); };
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+const today = App.todayISO();
+$('#todayDate').textContent = '· ' + App.formatDate(today);
+
+let defaultItems = [];
+let extraItems = [];
+
+async function loadAll() {
+  const [defaults, extras, uploads] = await Promise.all([
+    App.getDefaultChecklist(),
+    App.getExtraRequest(today),
+    App.getUploadsByDate(today)
+  ]);
+  defaultItems = defaults;
+  extraItems = extras;
+  renderDefault();
+  renderExtra();
+  renderTodayPhotos(uploads);
+}
+
+function renderList(el, items, onRemove) {
+  el.innerHTML = '';
+  if (items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'sub';
+    empty.style.padding = '4px 0';
+    empty.textContent = '항목이 없습니다.';
+    el.appendChild(empty);
+    return;
+  }
+  items.forEach((name, i) => {
+    const row = document.createElement('div');
+    row.className = 'item';
+    row.innerHTML = `<span class="name">${escapeHtml(name)}</span><button class="btn btn-danger">삭제</button>`;
+    row.querySelector('button').onclick = () => onRemove(i);
+    el.appendChild(row);
+  });
+}
+
+function renderDefault() {
+  renderList($('#defaultList'), defaultItems, async (i) => {
+    if (!confirm(`"${defaultItems[i]}" 삭제하시겠어요?`)) return;
+    defaultItems.splice(i, 1);
+    try {
+      await App.saveDefaultChecklist(defaultItems);
+      renderDefault();
+      showToast('삭제됨');
+    } catch (e) { showToast('삭제 실패: ' + e.message, true); }
+  });
+}
+
+function renderExtra() {
+  renderList($('#extraList'), extraItems, async (i) => {
+    extraItems.splice(i, 1);
+    try {
+      await App.saveExtraRequest(today, extraItems);
+      renderExtra();
+      showToast('삭제됨');
+    } catch (e) { showToast('삭제 실패: ' + e.message, true); }
+  });
+}
+
+$('#defaultAdd').onclick = async () => {
+  const v = $('#defaultInput').value.trim();
+  if (!v) return;
+  if (defaultItems.includes(v)) { showToast('이미 있는 항목입니다', true); return; }
+  defaultItems.push(v);
+  try {
+    await App.saveDefaultChecklist(defaultItems);
+    $('#defaultInput').value = '';
+    renderDefault();
+    showToast('추가됨');
+  } catch (e) { showToast('저장 실패: ' + e.message, true); defaultItems.pop(); }
+};
+$('#defaultInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#defaultAdd').click(); });
+
+$('#extraAdd').onclick = async () => {
+  const v = $('#extraInput').value.trim();
+  if (!v) return;
+  if (extraItems.includes(v) || defaultItems.includes(v)) { showToast('이미 있는 항목입니다', true); return; }
+  extraItems.push(v);
+  try {
+    await App.saveExtraRequest(today, extraItems);
+    $('#extraInput').value = '';
+    renderExtra();
+    showToast('추가됨');
+  } catch (e) { showToast('저장 실패: ' + e.message, true); extraItems.pop(); }
+};
+$('#extraInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#extraAdd').click(); });
+
+function renderTodayPhotos(uploads) {
+  const el = $('#todayPhotos');
+  if (uploads.length === 0) {
+    el.innerHTML = '<div class="empty">아직 올라온 사진이 없습니다.</div>';
+    return;
+  }
+  const byLabel = {};
+  for (const u of uploads) (byLabel[u.item_label] ||= []).push(u);
+  el.innerHTML = '';
+  for (const [label, photos] of Object.entries(byLabel)) {
+    const isExtra = photos[0].is_extra;
+    const div = document.createElement('div');
+    div.className = 'checklist-item done' + (isExtra ? ' extra' : '');
+    div.innerHTML = `
+      <div class="head">
+        <span class="name">${escapeHtml(label)}</span>
+        ${isExtra ? '<span class="badge">추가 요청</span>' : ''}
+        <span class="count">${photos.length}장 · 마지막 ${App.formatTime(photos[photos.length-1].created_at)}</span>
+      </div>
+      <div class="thumbs"></div>
+    `;
+    const thumbs = div.querySelector('.thumbs');
+    for (const p of photos) {
+      const img = document.createElement('img');
+      img.src = App.publicUrl(p.photo_path);
+      img.onclick = () => openModal(img.src);
+      thumbs.appendChild(img);
+    }
+    el.appendChild(div);
+  }
+}
+
+loadAll().catch(e => { console.error(e); showToast('불러오기 실패: ' + e.message, true); });
+</script>
+</body>
+</html>

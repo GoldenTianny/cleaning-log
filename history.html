@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<title>과거 클리닝 기록</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="container">
+  <header class="top">
+    <h1>과거 클리닝 기록</h1>
+    <div class="nav">
+      <a href="index.html">메인</a>
+      <a href="upload.html">업로드</a>
+    </div>
+  </header>
+
+  <div id="listView">
+    <div class="card">
+      <h2>날짜별 기록</h2>
+      <div class="sub">최근 60일까지 표시됩니다.</div>
+      <div class="date-list" id="dateList"></div>
+    </div>
+  </div>
+
+  <div id="detailView" style="display:none">
+    <div class="card">
+      <a href="#" id="backBtn" class="btn" style="margin-bottom:12px">← 목록으로</a>
+      <h2 id="detailDate"></h2>
+      <div id="detailPhotos"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="modal">
+  <button class="close" id="modalClose">×</button>
+  <img id="modalImg" alt="">
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+const toast = $('#toast');
+function showToast(msg, isError) {
+  toast.textContent = msg;
+  toast.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => { toast.className = 'toast'; }, 2000);
+}
+function openModal(src) { $('#modalImg').src = src; $('#modal').classList.add('show'); }
+$('#modalClose').onclick = () => $('#modal').classList.remove('show');
+$('#modal').onclick = (e) => { if (e.target.id === 'modal') $('#modal').classList.remove('show'); };
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function loadList() {
+  $('#listView').style.display = '';
+  $('#detailView').style.display = 'none';
+  const dates = await App.getDistinctDates(60);
+  const el = $('#dateList');
+  if (dates.length === 0) {
+    el.innerHTML = '<div class="empty">아직 클리닝 기록이 없습니다.</div>';
+    return;
+  }
+  const counts = await Promise.all(dates.map(d => App.getUploadsByDate(d).then(u => u.length)));
+  el.innerHTML = '';
+  dates.forEach((d, i) => {
+    const a = document.createElement('a');
+    a.href = '#' + d;
+    a.innerHTML = `<span>${App.formatDate(d)}</span><span class="count">${counts[i]}장</span>`;
+    a.onclick = (e) => { e.preventDefault(); location.hash = d; };
+    el.appendChild(a);
+  });
+}
+
+async function loadDetail(date) {
+  $('#listView').style.display = 'none';
+  $('#detailView').style.display = '';
+  $('#detailDate').textContent = App.formatDate(date);
+  const uploads = await App.getUploadsByDate(date);
+  const el = $('#detailPhotos');
+  if (uploads.length === 0) {
+    el.innerHTML = '<div class="empty">이 날 기록이 없습니다.</div>';
+    return;
+  }
+  const byLabel = {};
+  for (const u of uploads) (byLabel[u.item_label] ||= []).push(u);
+  el.innerHTML = '';
+  for (const [label, photos] of Object.entries(byLabel)) {
+    const isExtra = photos[0].is_extra;
+    const div = document.createElement('div');
+    div.className = 'checklist-item done' + (isExtra ? ' extra' : '');
+    div.innerHTML = `
+      <div class="head">
+        <span class="name">${escapeHtml(label)}</span>
+        ${isExtra ? '<span class="badge">추가 요청</span>' : ''}
+        <span class="count">${photos.length}장</span>
+      </div>
+      <div class="thumbs"></div>
+    `;
+    const thumbs = div.querySelector('.thumbs');
+    for (const p of photos) {
+      const img = document.createElement('img');
+      img.src = App.publicUrl(p.photo_path);
+      img.title = App.formatTime(p.created_at);
+      img.onclick = () => openModal(img.src);
+      thumbs.appendChild(img);
+    }
+    el.appendChild(div);
+  }
+}
+
+$('#backBtn').onclick = (e) => { e.preventDefault(); location.hash = ''; };
+
+function route() {
+  const hash = location.hash.replace(/^#/, '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(hash)) {
+    loadDetail(hash).catch(e => { console.error(e); showToast('불러오기 실패: ' + e.message, true); });
+  } else {
+    loadList().catch(e => { console.error(e); showToast('불러오기 실패: ' + e.message, true); });
+  }
+}
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>
