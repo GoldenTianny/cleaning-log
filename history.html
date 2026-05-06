@@ -37,6 +37,7 @@
 <div class="modal" id="modal">
   <button class="close" id="modalClose">×</button>
   <img id="modalImg" alt="">
+  <button class="delete-btn" id="modalDelete">🗑️ 삭제</button>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -51,9 +52,35 @@ function showToast(msg, isError) {
   toast.className = 'toast show' + (isError ? ' error' : '');
   setTimeout(() => { toast.className = 'toast'; }, 2000);
 }
-function openModal(src) { $('#modalImg').src = src; $('#modal').classList.add('show'); }
-$('#modalClose').onclick = () => $('#modal').classList.remove('show');
-$('#modal').onclick = (e) => { if (e.target.id === 'modal') $('#modal').classList.remove('show'); };
+let currentUpload = null;
+function openModal(src, upload) {
+  $('#modalImg').src = src;
+  $('#modal').classList.add('show');
+  currentUpload = upload || null;
+  $('#modalDelete').classList.toggle('show', !!upload);
+}
+function closeModal() {
+  $('#modal').classList.remove('show');
+  currentUpload = null;
+}
+$('#modalClose').onclick = closeModal;
+$('#modal').onclick = (e) => { if (e.target.id === 'modal') closeModal(); };
+$('#modalDelete').onclick = async () => {
+  if (!currentUpload) return;
+  if (!confirm('이 사진을 영구 삭제할까요?')) return;
+  $('#modalDelete').disabled = true;
+  try {
+    await App.deleteUpload(currentUpload);
+    closeModal();
+    showToast('삭제됨');
+    route();
+  } catch (e) {
+    console.error(e);
+    showToast('삭제 실패: ' + e.message, true);
+  } finally {
+    $('#modalDelete').disabled = false;
+  }
+};
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 async function loadList() {
@@ -106,7 +133,7 @@ async function loadDetail(date) {
       const img = document.createElement('img');
       img.src = App.publicUrl(p.photo_path);
       img.title = App.formatTime(p.created_at);
-      img.onclick = () => openModal(img.src);
+      img.onclick = () => openModal(img.src, p);
       thumbs.appendChild(img);
     }
     el.appendChild(div);

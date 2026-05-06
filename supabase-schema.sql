@@ -58,3 +58,6 @@ create policy "anon read photos" on storage.objects for select using (bucket_id 
 
 drop policy if exists "anon insert photos" on storage.objects;
 create policy "anon insert photos" on storage.objects for insert with check (bucket_id = 'photos');
+
+drop policy if exists "anon delete photos" on storage.objects;
+create policy "anon delete photos" on storage.objects for delete using (bucket_id = 'photos');

@@ -264,6 +264,24 @@ input[type="text"]:focus, textarea:focus {
   cursor: pointer;
 }
 
+.modal .delete-btn {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  background: rgba(220,38,38,0.92);
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: none;
+}
+
+.modal .delete-btn:hover { background: rgba(220,38,38,1); }
+.modal .delete-btn.show { display: block; }
+
 .note-text {
   font-size: 13px;
   color: var(--muted);

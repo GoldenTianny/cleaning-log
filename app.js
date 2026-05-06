@@ -109,6 +109,13 @@
     return out;
   }
 
+  async function deleteUpload(upload) {
+    const { error: storageErr } = await sb.storage.from('photos').remove([upload.photo_path]);
+    if (storageErr) throw storageErr;
+    const { error: dbErr } = await sb.from('uploads').delete().eq('id', upload.id);
+    if (dbErr) throw dbErr;
+  }
+
   async function uploadPhoto({ file, itemLabel, isExtra, note }) {
     const compressed = await compressImage(file);
     const date = todayISO();
@@ -143,6 +150,7 @@
     saveExtraRequest,
     getUploadsByDate,
     getDistinctDates,
-    uploadPhoto
+    uploadPhoto,
+    deleteUpload
   };
 })();
